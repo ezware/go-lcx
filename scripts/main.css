@@ -1,0 +1,75 @@
+/* main.css for lcx WebUI */
+.loading {
+    padding: 50px;
+    font-size: 72px;
+    text-align: center;
+    width: 96%;
+    /*border: solid 1px green;*/
+    animation: loading 1.5s;
+    animation-iteration-count:var(30)
+}
+
+.main {
+    padding: 20px;
+}
+
+.bbutton {
+    margin: 10px;
+    
+}
+
+@keyframes loading {
+    from {
+        color: cadetblue;
+        font-size: 64px;
+    }
+    
+    to {
+        color: cornflowerblue;
+        font-size: 72px
+    }
+}
+
+.pheader {
+    font-size: 32px;
+    padding: 10px;
+}
+.header1 {
+    text-align: center;
+    font-size: 32px;
+    color: white;
+    padding: 10px;
+    background-color: peru;
+}
+.proxyItem {
+    font-size: 18px;
+    padding: 5px;
+}
+.editform {
+    background-color: antiquewhite;
+    font-size: 24px;
+    padding: 16px;
+}
+/*
+table {
+    padding: 10px;
+    width: 98%;
+}
+
+tr {
+    line-height: 60px;
+    border-bottom: solid 1px beige
+}
+*/
+th {
+    font-size: 20px;
+    font-weight: bold;    
+}
+td {
+    padding: 10px;
+    /*margin: 10px;*/
+    font-size: 20px
+}
+.proxyTable {
+    margin: 20px;    
+}

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Go lcx WebUI</title>
+        <link rel="stylesheet" media="all" href="scripts/main.css">
+    </head>
+
+    <body>
+        <div id="loading" class="loading">loading</div>
+        <div id="vApp" style="display:none">
+            <div class = "main">
+                <div class="pheader">代理列表</div>
+                <el-table 
+                    :data="proxyList"
+                    @row-dblclick="tblDblClicked"
+                    class="proxyTable">
+                    <el-table-column v-for="f in proxyListColumns" v-if="f.field != 'op'" :width="f.field == 'id' ? 80 : 0" :prop="f.field" :label="f.label"></el-table-column>
+                    <el-table-column label="操作" width="220">
+                        <template slot-scope="scope">
+                            <el-button-group>                             
+                                <el-button circle @click="startBtnClicked($event, scope.row)" :icon="startBtnVals[scope.row.status != 0 ? 1 : 0]"></el-button>
+                                <el-button circle @click="delBtnClicked($event, scope.row)" icon="el-icon-delete"></el-button>
+                                <el-button circle @click="termBtnClicked($event, scope.row)" icon="el-icon-s-platform"></el-button>
+                            </el-button-group>
+                        </template>
+                    </el-table-column>
+                </el-table>
+                <el-button type="primary" @click="addProxyClicked">新建代理</el-button>
+            </div>
+            <el-dialog
+                :visible.sync="isEditModalActive"
+                :before-close="cancelEdit"
+                :title="editTitle"
+                width = "400px">
+                
+                <el-form label-position="right" label-width="80px">
+                    <el-form-item label="描述">
+                        <el-input v-model="editDesc"></el-input>
+                    </el-form-item>
+            
+                    <el-form-item label="本地IP地址">
+                        <el-input v-model="editLocalIp"></el-input>
+                    </el-form-item>
+
+                    <el-form-item label="本地端口">
+                        <el-input v-model="editLocalPort"></el-input>
+                    </el-form-item>
+            
+                    <el-form-item label="远端IP地址">
+                        <el-input v-model="editRemoteIp"></el-input>
+                    </el-form-item>
+                    <el-form-item label="远端端口">
+                        <el-input v-model="editRemotePort"></el-input>
+                    </el-form-item>
+                </el-form>
+                <div slot="footer">
+                    <el-button v-on:click="saveProxy" type="primary">保存</el-button>
+                    <el-button v-on:click="cancelEdit">取消</el-button>
+                </div>
+            </el-dialog>
+        </div>        
+    </body>
+
+    <script type="text/javascript" src="scripts/vue.min.js"></script>
+    <script type="text/javascript" src="scripts/axios.min.js"></script>
+
+    <script type="text/javascript" src="scripts/element-ui-index.js"></script>
+    <link rel="stylesheet" media="all" href="scripts/element-ui-index.css">
+
+    <script type="text/javascript" src="scripts/main.js"></script>     
+</html>
