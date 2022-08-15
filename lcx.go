@@ -193,9 +193,12 @@ func (pi *ProxyItem) stop() {
 	pi.Status = STATUS_STOPPED
 }
 
-func (*ProxyItem) restart() error {
+func (pi *ProxyItem) restart() error {
 	fmt.Println("Restarting proxy")
-	return nil
+	pi.stop()
+	err := pi.start()
+	//pi.mgr.modify(pi)
+	return err
 }
 
 func (pi *ProxyItem) addDefaults() {
@@ -339,12 +342,21 @@ func (pl *ProxyList) modify(p *ProxyItem) {
 		*/
 		if pi != *p {
 			p.addDefaults()
+			p.mgr = pl
 			restart := needRestart(&pi, p)
+			fmt.Println("Before modify: ", pi)
 			pl.pmap[p.Id] = *p
+			fmt.Println("After modify: ", p)
 
 			/* restart proxy use new param if changed */
 			if restart {
-				pi.restart()
+				err := p.restart()
+				if err != nil {
+					fmt.Println("Failed to restart proxy:", pi)
+				} else {
+					pl.pmap[p.Id] = *p
+					fmt.Println("After modify2: ", pl.pmap[p.Id])
+				}
 			}
 		} else {
 			fmt.Println("ProxyItem not changed", pi)
