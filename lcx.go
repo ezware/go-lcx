@@ -29,6 +29,8 @@ type ProxyItem struct {
 
 	//runtime attributes
 	Instances int
+	stopCh    chan int
+	mgr       *ProxyList
 }
 
 func (pi *ProxyItem) getLocalAddr() string {
@@ -100,24 +102,9 @@ type opResult struct {
 	err   error
 }
 
-func connRcvr(pi *ProxyItem, resultCh chan opResult, reqTimestamp string) {
+func connRcvr(pi *ProxyItem, listener net.Listener, reqTimestamp string) {
 	protocol := pi.Type
-	addr := pi.getLocalAddr()
 	remoteAddr := pi.getRemoteAddr()
-
-	var r = opResult{pi, reqTimestamp, nil}
-
-	listener, err := net.Listen(protocol, addr)
-	if err != nil {
-		r.err = fmt.Errorf("failed to listen on %s %s: %v", protocol, addr, err)
-		resultCh <- r
-		close(resultCh)
-		return
-	}
-	defer listener.Close()
-
-	resultCh <- r
-	close(resultCh)
 
 	for {
 		conn, err := listener.Accept()
@@ -134,16 +121,59 @@ func connRcvr(pi *ProxyItem, resultCh chan opResult, reqTimestamp string) {
 		}
 		log.Println("Established new connection to", remoteConn.RemoteAddr().String())
 		pi.Instances++
-		proxies.modify(pi)
+		pi.mgr.modify(pi)
 		go serverConn(pi, conn, remoteConn)
 	}
 }
 
+func newProxyServer(pi *ProxyItem, startResultCh chan opResult, reqTimestamp string) {
+	protocol := pi.Type
+	addr := pi.getLocalAddr()
+	var r = opResult{pi, reqTimestamp, nil}
+
+	//startResultCh
+	//stopCh
+	listener, err := net.Listen(protocol, addr)
+	if err != nil {
+		r.err = fmt.Errorf("failed to listen on %s %s: %v", protocol, addr, err)
+		startResultCh <- r
+		close(startResultCh)
+		return
+	}
+	defer listener.Close()
+
+	//create stop ch
+	stopCh := make(chan int)
+	pi.stopCh = stopCh
+	fmt.Println("Created stopCh:", pi)
+
+	go connRcvr(pi, listener, reqTimestamp)
+
+	log.Println("Started proxy:", pi)
+
+	startResultCh <- r
+	close(startResultCh)
+
+	//wait for stop signal
+	stop := <-stopCh
+	fmt.Println("Received stop proxy signal:", stop)
+
+	close(stopCh)
+	pi.stopCh = nil
+
+	log.Println("Stopped proxy:", pi)
+}
+
 func (pi *ProxyItem) start() error {
 	fmt.Println("Starting proxy")
+	if pi.Status > STATUS_STOPPED {
+		fmt.Println("Proxy already started:", pi)
+		return nil
+	}
+
 	ch := make(chan opResult)
 	ts := fmt.Sprintf("%d", time.Now().Unix())
-	go connRcvr(pi, ch, ts)
+	go newProxyServer(pi, ch, ts)
 
 	result := <-ch
 	if result.err == nil {
@@ -154,6 +184,12 @@ func (pi *ProxyItem) start() error {
 
 func (pi *ProxyItem) stop() {
 	fmt.Println("Stopping proxy")
+	if pi.Status == STATUS_STOPPED {
+		return
+	}
+
+	pi.stopCh <- pi.Id
+	time.After(time.Microsecond)
 	pi.Status = STATUS_STOPPED
 }
 
@@ -248,6 +284,7 @@ func (pl *ProxyList) getN(id int) (pi *ProxyItem, idx int) {
 func (pl *ProxyList) add(p ProxyItem) int {
 	p.Id = pl.allocId()
 	p.addDefaults()
+	p.mgr = pl
 	pl.pmap[p.Id] = p
 	fmt.Println("Added new porxy ", p)
 	return p.Id
@@ -382,6 +419,7 @@ func (pl *ProxyList) loadCfg(fileName string, autostart bool) {
 		p.Status = 0
 		p.Instances = 0
 		p.addDefaults()
+		p.mgr = pl
 		pl.pmap[p.Id] = p
 
 		if autostart {
@@ -389,7 +427,7 @@ func (pl *ProxyList) loadCfg(fileName string, autostart bool) {
 			if err != nil {
 				log.Println("Failed to start proxy", p, ", err:", err)
 			} else {
-				//update proxy status
+				//update proxy status and stopCh
 				pl.pmap[p.Id] = p
 			}
 		}

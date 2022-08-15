@@ -148,6 +148,9 @@ func lcxProxyHandler(resp http.ResponseWriter, req *http.Request) {
 			}
 		case "stop":
 			pi.stop()
+			proxies.modify(pi)
+			var rsp = errRsp{0, "Success", pi.Id, pi.Status}
+			resp.Write(rsp.ToJson())
 		default:
 			resp.Write(pi.ToJson())
 		}

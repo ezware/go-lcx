@@ -121,6 +121,7 @@
                     for (var i = 0; i < res.data.length; i++) {
                         vapp.proxylist.push(convertProxyItemFromServer(res.data[i]))
                     }
+                    vapp.proxylist.sort(function(a, b){return a.id - b.id})
                 },function(res){
                     console.log(res.status);
                 });
@@ -277,7 +278,7 @@
                         //modify status here
                         //setStatus
                         id = vapp.getArrayIndexByProxyId(res.data.Id)
-                        if (id) {
+                        if (id < vapp.proxylist.length) {
                             vapp.proxylist[id].status = res.data.Status
                         }
                     }
@@ -287,7 +288,16 @@
             },
             stopProxy: function(pid) {
                 this.$http.get("/lcx/proxy?id=" + pid + "&op=stop").then(function(res){
-                    console.log("stop proxy:" + res.status + ", resdata:" + JSON.stringify(res.data))
+                    if (res.data.Result != 0) {
+                        vapp.$message.error(res.data.Id + '停止失败：' + res.data.ErrMsg);
+                    } else {
+                        //modify status here
+                        //setStatus
+                        id = vapp.getArrayIndexByProxyId(res.data.Id)
+                        if (id < vapp.proxylist.length) {
+                            vapp.proxylist[id].status = res.data.Status
+                        }
+                    }
                 },function(res){
                     console.log(res.status);
                 })
