@@ -45,7 +45,8 @@
                 {
                     field: "id",
                     label: "编号",
-                    sortable: true
+                    sortable: true,
+		    width: 80
                 },
                 {
                     field: 'desc',
@@ -54,6 +55,7 @@
                 {
                     field: 'localip',
                     label: '本地IP地址',
+			width: 180
                 },
                 {
                     field: 'localport',
@@ -62,6 +64,7 @@
                 {
                     field: 'remoteip',
                     label: '远端IP地址',
+			width: 180,
                     centered: false
                 },
                 {
@@ -165,6 +168,7 @@
             },
             termBtnClicked: function(e, p) {
                 console.log("Openning term " + p.id)
+                window.open("term.html?localip=" + p.localip + "&localport=" + p.localport)
             },
             cellClicked: function(row, col, rowIndex, colIndex) {
                 console.log("Cell clicked, row " + rowIndex + ", col " + colIndex + ", field: " + col.field)
