@@ -1,79 +1,68 @@
-var t = new Terminal({cursorBlink: true, disableStdin: false, logLevel: 1});
-var writeData = ""
+//state constants
+const S_WAIT_CONNECT = 0
+const S_SEND_USERNAME = 1
+const S_SEND_PASSWORD = 2
+const S_SHELL_IO = 3
 
-t.onData(function(data) {
-    t.write(data)
-    if (ws) {
-        /*
-        if (send == "\n") {
-            send += "\r"
-        }
-        if (send == "\r") {
-            send += "\n"
-        }
-        */
-        ws.send(data)
+var g_State = S_WAIT_CONNECT
+var g_Term = undefined
+var g_WS = undefined
+var g_WSURL = "ws://" + window.location.host + '/ws'
+var g_Params = undefined
+
+function createTerm() {
+    g_Term = new Terminal({cursorBlink: true, disableStdin: false, logLevel: 1, fontFamily: "consolas", fontSize: 16});
+    if (!g_Term) {
+        console.log("Failed to create terminal")
+        return
     }
-    /*
-    if (data == "\r" || data == "\n") {
-        //t.write(writeData)
 
-        writeData = ""
+    g_Term.resize(150, 32)
+
+    g_Term.onData(function(data) {
+        let ECHO_ON = false
+        switch (g_State) {
+            case S_SEND_USERNAME:
+                if (data == '\r' || data == '\n') {
+                    g_Term.write('\n')
+                    g_State = S_SEND_PASSWORD
+                }
+                break
+            case S_SEND_PASSWORD:
+                if (data == '\r' || data == '\n') {
+                    g_Term.write('\r\n')
+                    g_State = S_SHELL_IO
+                }
+                break
+            case S_SHELL_IO:
+                break
+            case S_WAIT_CONNECT:
+                if (data == '\r') {
+                    console.log("Reconnecting websocket")
+                    createWebSocket(g_Params)
+                    return
+                }
+                break
+            default:
+                break
+        }
+        if (ECHO_ON) {
+            g_Term.write(data)
+        }
+        if (g_WS) {
+            g_WS.send(data)
+        }
+    })
+
+    let oTerm = document.getElementById("term")
+    if (oTerm) {
+        g_Term.open(oTerm)
     } else {
-        writeData += data
+        console.log("Failed to get term object")
     }
-    */
-})
-//t.onKey((k,e) => console.log(k, e))
-//var attachAddon = AttachAddon(ws);
-//t.loadAddon(attachAddon);
-oTerm = document.getElementById("term")
-if (oTerm) {
-    t.open(oTerm)
-} else {
-    console.log("Failed to get term object")
 }
-
-var wsurl = "ws://" + window.location.host + '/ws'
 
 function getParams() {
-    let searchStr = window.location.search.substring(1)
-    if (searchStr) {
-        let aParam = searchStr.split("&")
-        let p = ""
-        let pa = []
-        let pn = ""
-        let pv = ""
-        let params = {}
-        let paramStr = "params={"
-        let j = 0
-        for (var i = 0; i < aParam.length; i++) {
-            p = aParam[i]
-            pa = p.split("=")
-            if (pa.length > 1) {                
-                pn = pa[0]
-                pv = pa[1]
-                if (j > 0) {
-                    paramStr +=","
-                }
-                paramStr += pn + ": \"" + pv + "\""
-                console.log("Param" + i + ": " + pn + " = " + pv)
-                j++
-            } else {
-                console.log("Failed to parse param" + i)
-            }
-        }
-        paramStr += "}"
-        eval(paramStr)
-        console.log("parmas:", params)
-
-        return params
-    } else {
-        return {}
-    }
-}
-
-function getParams2() {
     let  oGetVars = {};
 
     buildValue = function(sValue) {
@@ -93,15 +82,6 @@ function getParams2() {
 
     return oGetVars
 }
-params = getParams2()
-console.log("ws url: " + wsurl + ", params:" + params)
-var ws = new WebSocket(wsurl + '?op=termconnect&id=' + params.id);
-//var ws = new WebSocket(wsurl + '?op=wscomm&id=' + params.id);
-var state = 0
-ws.onopen = function(evt) {
-  console.log('Connection open ...');
-  //ws.send('{Id:' + params.id + '}');
-};
 
 function ctrlHandler(data) {
     console.log("Received control packet " + data)
@@ -111,35 +91,70 @@ function dataHandler(data) {
     console.log("Received data packet " + data)
 }
 
-ws.onmessage = function(evt) {
-  console.log('Received Message: ' + evt.data);  
-  msg = evt.data
-  if (msg.Type == "c") {
-    ctrlHandler(msg.Data)
-  } else if (msg.Type == "d") {
-    dataHandler(msg.Data)
-  } else {
-    //unknown type, write out
-    t.write(evt.data)
-  }
-  /*
-    switch (state) {
-        case 0:
-            if (t) {
-                //t.write("Connecting to proxy " + evt.data)
-                t.write(evt.data)
-            }
-            break
-        case 1:
-            if (t) {
-                t.write(evt.data)
-            }
-            break
-        default:
-    }
-    */
-};
+function createWebSocket(params) {
+    if (g_State == S_WAIT_CONNECT) {
+        g_WS = new WebSocket(g_WSURL + '?op=termconnect&id=' + params.id);
+        if (!g_WS) {
+            console.log("Failed to create websocket")
+            return
+        }
 
-ws.onclose = function(evt) {
-  console.log('Connection closed.');
-};
+        g_WS.onopen = function(evt) {
+            console.log('Connection open ...');
+            g_State = S_SEND_USERNAME
+        };
+
+        g_WS.onmessage = function(evt) {
+            console.log('Received Message: ' + evt.data);
+            msg = evt.data
+            if (msg.Type == "c") {
+                ctrlHandler(msg.Data)
+            } else if (msg.Type == "d") {
+                dataHandler(msg.Data)
+            } else {
+                //unknown type, write out
+                g_Term.write(evt.data)
+            }
+        };
+
+        g_WS.onclose = function(evt) {
+            console.log('Connection closed.');
+            g_State = S_WAIT_CONNECT
+            if (g_Term) {
+                g_Term.write("\r\nConnection lost, press ENTER to reconnect\r\n")
+            }
+        };
+    }
+}
+
+function setTitle(params) {
+    let oTitle = document.getElementById("title")
+    if (oTitle) {
+        oTitle.innerText = "LocalAddr: " + params.localip + ":" + params.localport + ", RemoteAddr: " + params.remoteip + ":" + params.remoteport
+    }
+}
+
+function resizeBtnClicked() {
+    let oRows = document.getElementById("rows")
+    let oCols = document.getElementById("cols")
+
+    let rows = oRows.value
+    let cols = oCols.value
+
+    if (isNaN(rows) || rows < 5) {
+        rows = 5
+    }
+    if (isNaN(cols) || cols < 5) {
+        cols = 5
+    }
+
+    if (g_Term) {
+        g_Term.resize(cols, rows)
+    }
+}
+
+g_Params = getParams()
+console.log("ws url: " + g_WSURL + ", params:" + g_Params)
+setTitle(g_Params)
+createTerm()
+createWebSocket(g_Params)

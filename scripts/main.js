@@ -168,7 +168,7 @@
             },
             termBtnClicked: function(e, p) {
                 console.log("Openning term " + p.id)
-                window.open("term.html?localip=" + p.localip + "&localport=" + p.localport)
+                window.open("term.html?id=" + p.id + "&localip=" + p.localip + "&localport=" + p.localport + "&remoteip=" + p.remoteip + "&remoteport=" + p.remoteport)
             },
             cellClicked: function(row, col, rowIndex, colIndex) {
                 console.log("Cell clicked, row " + rowIndex + ", col " + colIndex + ", field: " + col.field)

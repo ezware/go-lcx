@@ -8,6 +8,12 @@
     </head>
 
     <body>
+        <div style = "padding: 10px">
+            <div id = "title"></div>
+            cols: <input id = "cols" value="150"/>
+            rows: <input id = "rows" value="32"/>
+            <input type="button" value="Resize" onclick="javascript: resizeBtnClicked()"/>
+        </div>
         <div id="term" width="100%" height="100%"></div>
         <script type="text/javascript" src="scripts/xterm.js"></script>        
         <script type="text/javascript" src="scripts/term.js"></script>
