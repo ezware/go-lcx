@@ -15,8 +15,8 @@
                 <el-table
                     :data="proxyList"
                     @row-dblclick="tblDblClicked"
-		     stripe
-		     border
+                    stripe
+                    border
                     class="proxyTable">
                     <el-table-column header-align="center" align="center" v-for="f in proxyListColumns" v-if="f.field != 'op'" :width="f.width == undefined ? 0 : f.width" :prop="f.field" :label="f.label"></el-table-column>
                     <el-table-column label="操作" width="160" header-align="center" align="center">
@@ -30,6 +30,7 @@
                     </el-table-column>
                 </el-table>
                 <el-button type="primary" @click="addProxyClicked">新建代理</el-button>
+                <el-button @click="saveConfig">保存配置</el-button>
             </div>
             <el-dialog
                 :visible.sync="isEditModalActive"
@@ -54,6 +55,26 @@
                     </el-form-item>
                     <el-form-item label="远端端口">
                         <el-input v-model="editRemotePort"></el-input>
+                    </el-form-item>
+                    <el-form-item label="网络协议">
+                        <el-select v-model="editType" placeholder="请选择">
+                            <el-option
+                              v-for="item in protocolOptions"
+                              :key="item.value"
+                              :label="item.label"
+                              :value="item.value">
+                            </el-option>
+                        </el-select>
+                    </el-form-item>
+                    <el-form-item label="终端类型">
+                        <el-select v-model="editTermType" placeholder="请选择">
+                            <el-option
+                              v-for="item in termTypeOptions"
+                              :key="item.value"
+                              :label="item.label"
+                              :value="item.value">
+                            </el-option>
+                        </el-select>
                     </el-form-item>
                 </el-form>
                 <div slot="footer">

@@ -26,6 +26,7 @@ type ProxyItem struct {
 	RemotePort int
 	Desc       string
 	Type       string //tcp, udp, unix
+	TermType   string //ssh, telnet
 
 	//runtime attributes
 	Instances int
@@ -102,7 +103,7 @@ type opResult struct {
 	err   error
 }
 
-func connRcvr(pi *ProxyItem, listener net.Listener, reqTimestamp string) {
+func connRcvr(pi ProxyItem, listener net.Listener, reqTimestamp string) {
 	protocol := pi.Type
 	remoteAddr := pi.getRemoteAddr()
 
@@ -121,15 +122,15 @@ func connRcvr(pi *ProxyItem, listener net.Listener, reqTimestamp string) {
 		}
 		log.Println("Established new connection to", remoteConn.RemoteAddr().String())
 		pi.Instances++
-		pi.mgr.modify(pi)
-		go serverConn(pi, conn, remoteConn)
+		pi.mgr.modify(&pi)
+		go serverConn(&pi, conn, remoteConn)
 	}
 }
 
-func newProxyServer(pi *ProxyItem, startResultCh chan opResult, reqTimestamp string) {
+func newProxyServer(pi ProxyItem, startResultCh chan opResult, reqTimestamp string) {
 	protocol := pi.Type
 	addr := pi.getLocalAddr()
-	var r = opResult{pi, reqTimestamp, nil}
+	var r = opResult{&pi, reqTimestamp, nil}
 
 	//startResultCh
 	//stopCh
@@ -173,7 +174,7 @@ func (pi *ProxyItem) start() error {
 
 	ch := make(chan opResult)
 	ts := fmt.Sprintf("%d", time.Now().Unix())
-	go newProxyServer(pi, ch, ts)
+	go newProxyServer(*pi, ch, ts)
 
 	result := <-ch
 	if result.err == nil {

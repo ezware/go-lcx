@@ -16,7 +16,9 @@
             remoteip: serverObj.RemoteIp,
             remoteport: serverObj.RemotePort,
             status: serverObj.Status,
-            instances: serverObj.Instances
+            instances: serverObj.Instances,
+            type: serverObj.Type || "tcp",
+            termtype: serverObj.TermType || "ssh"
         }
         return localObj
     }
@@ -46,7 +48,7 @@
                     field: "id",
                     label: "编号",
                     sortable: true,
-		    width: 80
+                    width: 80
                 },
                 {
                     field: 'desc',
@@ -55,7 +57,7 @@
                 {
                     field: 'localip',
                     label: '本地IP地址',
-			width: 180
+                    width: 180
                 },
                 {
                     field: 'localport',
@@ -64,7 +66,7 @@
                 {
                     field: 'remoteip',
                     label: '远端IP地址',
-			width: 180,
+                    width: 180,
                     centered: false
                 },
                 {
@@ -78,6 +80,14 @@
                 {
                     field: 'instances',
                     label: '实例数'
+                },
+                {
+                    field: 'type',
+                    label: '协议类型'
+                },
+                {
+                    field: 'termtype',
+                    label: '终端类型'
                 },
                 {
                     field: 'op',
@@ -95,6 +105,26 @@
                     model: 1
                 }
             ],
+            protocolOptions: [
+                {
+                    value: 'tcp',
+                    label: 'tcp'
+                },
+                {
+                    value: 'udp',
+                    label: 'udp'
+                }
+            ],
+            termTypeOptions: [
+                {
+                    value: 'ssh',
+                    label: 'ssh'
+                },
+                {
+                    value: 'telnet',
+                    label: 'telnet'
+                }
+            ],
             editDesc: "",
             editLocalIp: "",
             editLocalPort: 0,
@@ -103,6 +133,8 @@
             editTitle: "",
             editMode: 0,
             editId: 0,  //proxy id
+            editType: "tcp",
+            editTermType: "ssh",
             editProxyArrayIndex: undefined  //proxy list index
         },
         computed: {
@@ -168,7 +200,9 @@
             },
             termBtnClicked: function(e, p) {
                 console.log("Openning term " + p.id)
-                window.open("term.html?id=" + p.id + "&localip=" + p.localip + "&localport=" + p.localport + "&remoteip=" + p.remoteip + "&remoteport=" + p.remoteport)
+                window.open("term.html?id=" + p.id + "&localip=" + p.localip + "&localport=" + p.localport
+                + "&remoteip=" + p.remoteip + "&remoteport=" + p.remoteport
+                + "&termtype=" + p.termtype)
             },
             cellClicked: function(row, col, rowIndex, colIndex) {
                 console.log("Cell clicked, row " + rowIndex + ", col " + colIndex + ", field: " + col.field)
@@ -192,6 +226,8 @@
                 this.editLocalPort = row.localport
                 this.editRemoteIp = row.remoteip
                 this.editRemotePort = row.remoteport
+                this.editType = row.type
+                this.editTermType = row.termtype
                 this.editTitle = '修改代理信息'
                 this.editMode = 1
                 var haveIndex = undefined
@@ -208,6 +244,8 @@
                 this.editLocalPort = 30000
                 this.editRemoteIp = ""
                 this.editRemotePort = 22
+                this.editType = "tcp"
+                this.editTermType = "ssh"
                 this.editTitle = '新增代理信息'
                 this.editMode = 0
 
@@ -222,6 +260,8 @@
                 proxyItem.localport = this.editLocalPort
                 proxyItem.remoteip = this.editRemoteIp
                 proxyItem.remoteport = this.editRemotePort
+                proxyItem.type = this.editType
+                proxyItem.termtype = this.editTermType
                 //newProxy.status = 0
             },
             getProxyVar: function() {
@@ -232,6 +272,8 @@
                 newProxy.LocalPort = parseInt(this.editLocalPort)
                 newProxy.RemoteIp = this.editRemoteIp
                 newProxy.RemotePort = parseInt(this.editRemotePort)
+                newProxy.Type = this.editType
+                newProxy.TermType = this.editTermType
                 newProxy.Status = 0
                 return newProxy
             },
@@ -309,6 +351,9 @@
             cancelEdit: function() {
                 console.log("Cancel edit")
                 this.isEditModalActive = false
+            },
+            saveConfig: function() {
+                this.$http.get("/lcx?op=save").then(function(res){ vapp.$message.info("Config saved")})
             }
         }
     });

@@ -130,7 +130,9 @@ function createWebSocket(params) {
 function setTitle(params) {
     let oTitle = document.getElementById("title")
     if (oTitle) {
-        oTitle.innerText = "LocalAddr: " + params.localip + ":" + params.localport + ", RemoteAddr: " + params.remoteip + ":" + params.remoteport
+        oTitle.innerText = "LocalAddr: " + params.localip + ":" + params.localport
+                + ", RemoteAddr: " + params.remoteip + ":" + params.remoteport
+                + ", TermType: " + params.termtype
     }
 }
 

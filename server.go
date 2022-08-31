@@ -66,6 +66,9 @@ func main() {
 	d := filepath.Dir(os.Args[0])
 	if !filepath.IsAbs(cfg.cfgFile) {
 		cfg.cfgFile = d + string(filepath.Separator) + cfg.cfgFile
+	} else {
+		cfgdir := filepath.Dir(cfg.cfgFile)
+		os.MkdirAll(cfgdir, 0764)
 	}
 
 	proxies.loadCfg(cfg.cfgFile, cfg.autoStart)
