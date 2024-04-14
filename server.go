@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 )
 
@@ -23,8 +25,10 @@ type appcfg struct {
 }
 
 var (
-	proxies ProxyList
-	cfg     appcfg
+	proxies   *ProxyList
+	cfg       appcfg
+	defaultIp string
+	iplist    []string
 )
 
 const (
@@ -58,8 +62,15 @@ func signalProc() {
 func main() {
 	flag.Parse()
 
-	proxies = ProxyList{}
-	proxies.pmap = make(map[int]ProxyItem, 10)
+	iplist = getIPList()
+	defaultIp, _ = getDefaultIp()
+	fmt.Println("========== IPLIST BEGIN ==========")
+	fmt.Println(iplist)
+	fmt.Println("========== IPLIST END   ==========")
+	fmt.Println(defaultIp)
+
+	proxies = &ProxyList{}
+	proxies.pmap = make(map[int]*ProxyItem, 10)
 	proxies.maxId = 0
 
 	//excutable path
@@ -80,6 +91,8 @@ func main() {
 	fmt.Println("Current work dir:", d)
 	http.Handle("/", http.FileServer(http.Dir(d)))
 	http.HandleFunc("/lcx", lcxHandler)
+	http.HandleFunc("/lcx/defaultip", defaultIpHandler)
+	http.HandleFunc("/lcx/iplist", iplistHandler)
 	http.HandleFunc("/lcx/proxylist", lcxProxyListHandler)
 	http.HandleFunc("/lcx/proxy", lcxProxyHandler) //get & del
 	http.HandleFunc("/lcx/proxy/add", lcxProxyAddHandler)
@@ -100,7 +113,41 @@ func lcxHandler(resp http.ResponseWriter, req *http.Request) {
 		lcxProxyListHandler(resp, req)
 	case "save":
 		proxies.save(cfg.cfgFile)
+	case "defaultip":
+		defaultIpHandler(resp, req)
+	case "iplist":
+		iplistHandler(resp, req)
 	}
+}
+
+func defaultIpHandler(resp http.ResponseWriter, req *http.Request) {
+	m := req.Method
+	var ip []byte
+
+	if m == http.MethodGet {
+		ip = []byte(defaultIp)
+	} else {
+		ip = []byte("")
+	}
+
+	resp.Write([]byte(ip))
+}
+
+func iplistHandler(resp http.ResponseWriter, req *http.Request) {
+	m := req.Method
+	var iplistJson []byte
+	var err error
+
+	if m == http.MethodGet {
+		iplistJson, err = json.Marshal(iplist)
+		if err != nil {
+			fmt.Println("Failed to marshal iplist json", err)
+		}
+	} else {
+		iplistJson = []byte("{}")
+	}
+
+	resp.Write([]byte(iplistJson))
 }
 
 func lcxProxyListHandler(resp http.ResponseWriter, req *http.Request) {
@@ -129,8 +176,6 @@ func (e *errRsp) ToJson() []byte {
 }
 
 func lcxProxyHandler(resp http.ResponseWriter, req *http.Request) {
-	//vals := req.URL.Query()
-
 	id := req.FormValue("id")
 	op := req.FormValue("op")
 
@@ -155,13 +200,11 @@ func lcxProxyHandler(resp http.ResponseWriter, req *http.Request) {
 				resp.Write(rsp.ToJson())
 			} else {
 				fmt.Println("After start1:", pi)
-				proxies.modify(pi)
 				var rsp = errRsp{0, "Success", pi.Id, pi.Status}
 				resp.Write(rsp.ToJson())
 			}
 		case "stop":
 			pi.stop()
-			proxies.modify(pi)
 			var rsp = errRsp{0, "Success", pi.Id, pi.Status}
 			resp.Write(rsp.ToJson())
 		default:
@@ -176,12 +219,11 @@ func lcxProxyHandler(resp http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func getFormData(req *http.Request, includeId bool) (ProxyItem, error) {
+func getFormData(req *http.Request, includeId bool) (*ProxyItem, error) {
 	var idn int
 	var lportn int
 	var rportn int
 	var paramOk = true
-	var pi ProxyItem
 	var ppi *ProxyItem
 	var errstr string
 	var err error
@@ -240,7 +282,7 @@ func getFormData(req *http.Request, includeId bool) (ProxyItem, error) {
 	desc := req.FormValue("desc")
 
 	if paramOk {
-		pi = ProxyItem{
+		ppi = &ProxyItem{
 			Id:         idn,
 			Desc:       desc,
 			LocalIp:    lip,
@@ -252,11 +294,11 @@ func getFormData(req *http.Request, includeId bool) (ProxyItem, error) {
 		allerr = fmt.Errorf("%s %v", errstr, allerr)
 	}
 
-	return pi, allerr
+	return ppi, allerr
 }
 
-func getBodyData(req *http.Request, includeId bool) (ProxyItem, error) {
-	var pi = ProxyItem{}
+func getBodyData(req *http.Request, includeId bool) (*ProxyItem, error) {
+	var pi = &ProxyItem{}
 	var err error
 	var body []byte
 
@@ -279,7 +321,7 @@ func getBodyData(req *http.Request, includeId bool) (ProxyItem, error) {
 
 func lcxProxyAddHandler(resp http.ResponseWriter, req *http.Request) {
 	var err error
-	var pi ProxyItem
+	var pi *ProxyItem
 
 	fmt.Println("Add request: ", req)
 
@@ -309,7 +351,7 @@ func lcxProxyAddHandler(resp http.ResponseWriter, req *http.Request) {
 }
 
 func lcxProxyModifyHandler(resp http.ResponseWriter, req *http.Request) {
-	var pi ProxyItem
+	var pi *ProxyItem
 	var err error
 
 	fmt.Println("Modify request: ", req.Form)
@@ -327,7 +369,7 @@ func lcxProxyModifyHandler(resp http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		resp.Write([]byte("Failed to get proxy data from request:" + err.Error()))
 	} else {
-		proxies.modify(&pi)
+		proxies.modify(pi)
 	}
 }
 
@@ -335,7 +377,6 @@ func lcxProxyOpHandler(resp http.ResponseWriter, req *http.Request) {
 	var paramOk = true
 
 	resp.Write([]byte("lcx modify handled"))
-	//vals := req.URL.Query()
 
 	id := req.FormValue("id")
 	if id == "" {
@@ -380,4 +421,56 @@ func websocketHandler(resp http.ResponseWriter, req *http.Request) {
 	default:
 		resp.Write([]byte("Unknown operation:" + op))
 	}
+}
+
+func getIPList() []string {
+	// get all interfaces
+	iplist := []string{}
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		fmt.Println("Error:", err)
+		return iplist
+	}
+
+	for _, iface := range interfaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+
+		addrs, err := iface.Addrs()
+		if err != nil {
+			fmt.Println("Error:", err)
+			continue
+		}
+
+		for _, addr := range addrs {
+			switch v := addr.(type) {
+			case *net.IPNet:
+				// IPv4 or IPv6
+				//fmt.Println(v.IP)
+				iplist = append(iplist, v.IP.String())
+			case *net.IPAddr:
+				// Normally IPv4
+				//fmt.Println(v.IP)
+				iplist = append(iplist, v.IP.String())
+			}
+		}
+	}
+
+	fmt.Println("After get ip list")
+	return iplist
+}
+
+func getDefaultIp() (ip string, err error) {
+	conn, err := net.Dial("udp", "8.8.8.8:53")
+	if err != nil {
+		fmt.Println(err)
+		return "", err
+	}
+	defer conn.Close()
+
+	localAddr := conn.LocalAddr().(*net.UDPAddr)
+	ip = localAddr.String()
+	ip = strings.Split(ip, ":")[0]
+	return ip, nil
 }

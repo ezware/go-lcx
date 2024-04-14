@@ -43,6 +43,7 @@
                 }
                 */
             ],
+            defaultIp: "",
             proxyListColumns: [
                 {
                     field: "id",
@@ -160,6 +161,14 @@
                 },function(res){
                     console.log(res.status);
                 });
+            this.$http.get("/lcx/defaultip").then(
+                function(res){
+                    var newobj = {}
+                    console.log("get defaultip:" + res.status + ", resdata:" + res.data)
+                    vapp.defaultIp = res.data
+                },function(res){
+                    console.log(res.status);
+                });
         },
         methods: {
             testClick: function(e) {
@@ -240,7 +249,7 @@
                 console.log("Add proxy," + this)
                 this.editId = 0
                 this.editDesc = ""
-                this.editLocalIp = ""
+                this.editLocalIp = this.defaultIp
                 this.editLocalPort = 30000
                 this.editRemoteIp = ""
                 this.editRemotePort = 22

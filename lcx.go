@@ -93,7 +93,6 @@ func serverConn(pi *ProxyItem, local net.Conn, remote net.Conn) {
 	log.Printf("%s to %s proxy instance exited", local.LocalAddr().String(), remote.RemoteAddr().String())
 	if pi.Instances > 0 {
 		pi.Instances--
-		proxies.modify(pi)
 	}
 }
 
@@ -103,7 +102,7 @@ type opResult struct {
 	err   error
 }
 
-func connRcvr(pi ProxyItem, listener net.Listener, reqTimestamp string) {
+func connRcvr(pi *ProxyItem, listener net.Listener, reqTimestamp string) {
 	protocol := pi.Type
 	remoteAddr := pi.getRemoteAddr()
 
@@ -122,15 +121,14 @@ func connRcvr(pi ProxyItem, listener net.Listener, reqTimestamp string) {
 		}
 		log.Println("Established new connection to", remoteConn.RemoteAddr().String())
 		pi.Instances++
-		pi.mgr.modify(&pi)
-		go serverConn(&pi, conn, remoteConn)
+		go serverConn(pi, conn, remoteConn)
 	}
 }
 
-func newProxyServer(pi ProxyItem, startResultCh chan opResult, reqTimestamp string) {
+func newProxyServer(pi *ProxyItem, startResultCh chan opResult, reqTimestamp string) {
 	protocol := pi.Type
 	addr := pi.getLocalAddr()
-	var r = opResult{&pi, reqTimestamp, nil}
+	var r = opResult{pi, reqTimestamp, nil}
 
 	//startResultCh
 	//stopCh
@@ -160,13 +158,14 @@ func newProxyServer(pi ProxyItem, startResultCh chan opResult, reqTimestamp stri
 	fmt.Println("Received stop proxy signal:", stop)
 
 	close(stopCh)
+	pi.Status = STATUS_STOPPED
 	pi.stopCh = nil
 
 	log.Println("Stopped proxy:", pi)
 }
 
 func (pi *ProxyItem) start() error {
-	fmt.Println("Starting proxy")
+	fmt.Println("Starting proxy", pi)
 	if pi.Status > STATUS_STOPPED {
 		fmt.Println("Proxy already started:", pi)
 		return nil
@@ -174,7 +173,7 @@ func (pi *ProxyItem) start() error {
 
 	ch := make(chan opResult)
 	ts := fmt.Sprintf("%d", time.Now().Unix())
-	go newProxyServer(*pi, ch, ts)
+	go newProxyServer(pi, ch, ts)
 
 	result := <-ch
 	if result.err == nil {
@@ -186,19 +185,26 @@ func (pi *ProxyItem) start() error {
 func (pi *ProxyItem) stop() {
 	fmt.Println("Stopping proxy")
 	if pi.Status == STATUS_STOPPED {
+		fmt.Println("Proxy already stopped")
 		return
 	}
 
+	fmt.Println("StopChan:", pi.stopCh)
 	pi.stopCh <- pi.Id
 	time.After(time.Microsecond)
-	pi.Status = STATUS_STOPPED
+	fmt.Println("Notified proxy stop")
+	for {
+		if pi.Status == STATUS_STOPPED {
+			break
+		}
+		time.After(time.Microsecond)
+	}
 }
 
 func (pi *ProxyItem) restart() error {
 	fmt.Println("Restarting proxy")
 	pi.stop()
 	err := pi.start()
-	//pi.mgr.modify(pi)
 	return err
 }
 
@@ -254,7 +260,7 @@ func (p *ProxyItem) ToJson() []byte {
 }
 
 type ProxyList struct {
-	pmap  map[int]ProxyItem
+	pmap  map[int]*ProxyItem
 	maxId int
 }
 
@@ -263,7 +269,7 @@ func (pl *ProxyList) allocId() int {
 	return pl.maxId
 }
 
-func (pl *ProxyList) get(id string) (pi *ProxyItem, idx int) {
+func (pl *ProxyList) get(id string) (*ProxyItem, int) {
 	idn, err := strconv.Atoi(id)
 	if err != nil {
 		fmt.Println("Invalid id: ", id)
@@ -273,19 +279,18 @@ func (pl *ProxyList) get(id string) (pi *ProxyItem, idx int) {
 	return pl.getN(idn)
 }
 
-func (pl *ProxyList) getN(id int) (pi *ProxyItem, idx int) {
+func (pl *ProxyList) getN(id int) (*ProxyItem, int) {
 	fmt.Println("Getting proxy ", id)
 
 	p, ok := pl.pmap[id]
 	if ok {
-		pi = &p
-		return pi, pi.Id
+		return p, p.Id
 	}
 
 	return nil, 0
 }
 
-func (pl *ProxyList) add(p ProxyItem) int {
+func (pl *ProxyList) add(p *ProxyItem) int {
 	p.Id = pl.allocId()
 	p.addDefaults()
 	p.mgr = pl
@@ -304,34 +309,42 @@ func (pl *ProxyList) del(id string) error {
 	return nil
 }
 
-func needRestart(p1 *ProxyItem, p2 *ProxyItem) bool {
+// update p1 by p2
+// return updated
+func updateProxy(p1 *ProxyItem, p2 *ProxyItem) bool {
+	updated := false
 	if p1.LocalIp != p2.LocalIp {
-		return true
+		p1.LocalIp = p2.LocalIp
+		updated = true
 	}
 
 	if p1.LocalPort != p2.LocalPort {
-		return true
+		p1.LocalPort = p2.LocalPort
+		updated = true
 	}
 
 	if p1.RemoteIp != p2.RemoteIp {
-		return true
+		p1.RemoteIp = p2.RemoteIp
+		updated = true
 	}
 
 	if p1.RemotePort != p2.RemotePort {
-		return true
+		p1.RemotePort = p2.RemotePort
+		updated = true
 	}
 
 	if p1.Type != p2.Type {
-		return true
+		p1.Type = p2.Type
+		updated = true
 	}
 
-	return false
+	return updated
 }
 
-func (pl *ProxyList) modify(p *ProxyItem) {
+func (pl *ProxyList) modify(newp *ProxyItem) {
 	fmt.Println("Modifing proxy")
 
-	pi, ok := pl.pmap[p.Id]
+	pi, ok := pl.pmap[newp.Id]
 	if ok {
 		/* test if changed */
 		/*
@@ -341,29 +354,25 @@ func (pl *ProxyList) modify(p *ProxyItem) {
 			pi.RemoteIp = p.RemoteIp
 			pi.RemotePort = p.RemotePort
 		*/
-		if pi != *p {
-			p.addDefaults()
-			p.mgr = pl
-			restart := needRestart(&pi, p)
+		if *pi != *newp {
 			fmt.Println("Before modify: ", pi)
-			pl.pmap[p.Id] = *p
-			fmt.Println("After modify: ", p)
+			restart := updateProxy(pi, newp)
+			fmt.Println("After modify: ", newp)
 
 			/* restart proxy use new param if changed */
 			if restart {
-				err := p.restart()
+				err := pi.restart()
 				if err != nil {
 					fmt.Println("Failed to restart proxy:", pi)
 				} else {
-					pl.pmap[p.Id] = *p
-					fmt.Println("After modify2: ", pl.pmap[p.Id])
+					fmt.Println("After modify2: ", pl.pmap[pi.Id])
 				}
 			}
 		} else {
 			fmt.Println("ProxyItem not changed", pi)
 		}
 	} else {
-		fmt.Println("proxy", p.Id, "not exist")
+		fmt.Println("proxy", newp.Id, "not exist")
 	}
 }
 
@@ -417,7 +426,7 @@ func (pl *ProxyList) loadCfg(fileName string, autostart bool) {
 		return
 	}
 
-	var items []ProxyItem
+	var items = make([]ProxyItem, 10)
 
 	err = json.Unmarshal(buf, &items)
 	if err != nil {
@@ -433,15 +442,12 @@ func (pl *ProxyList) loadCfg(fileName string, autostart bool) {
 		p.Instances = 0
 		p.addDefaults()
 		p.mgr = pl
-		pl.pmap[p.Id] = p
+		pl.pmap[p.Id] = &p
 
 		if autostart {
 			err = p.start()
 			if err != nil {
 				log.Println("Failed to start proxy", p, ", err:", err)
-			} else {
-				//update proxy status and stopCh
-				pl.pmap[p.Id] = p
 			}
 		}
 	}
